@@ -2,6 +2,14 @@
 {
     public class ZipService
     {
-        
+        public void ZipFile()
+        {
+
+        }
+
+        public void UnZipFile()
+        {
+
+        }
     }
 }
