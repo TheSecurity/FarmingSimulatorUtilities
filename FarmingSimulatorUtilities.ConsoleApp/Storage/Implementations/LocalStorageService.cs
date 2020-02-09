@@ -50,5 +50,19 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
             errorMessage = null;
             return true;
         }
+
+        public bool TryGetConfigurationPath(out string path)
+        {
+            var json = File.ReadAllText(ConfigurationFilePath);
+            var configuration = JsonConvert.DeserializeObject<Configuration>(json);
+            if (string.IsNullOrEmpty(configuration?.SavePath))
+            {
+                path = "";
+                return false;
+            }
+
+            path = configuration.SavePath;
+            return true;
+        }
     }
 }

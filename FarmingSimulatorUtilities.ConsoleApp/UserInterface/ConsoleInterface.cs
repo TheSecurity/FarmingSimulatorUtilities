@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Drawing;
 using System.Threading;
+using FarmingSimulatorUtilities.ConsoleApp.Services;
 using FarmingSimulatorUtilities.ConsoleApp.Storage;
 
 namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
@@ -8,10 +8,14 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
     public class ConsoleInterface
     {
         private readonly ILocalStorageService _localStorage;
+        private readonly IRemoteStorageService _remoteStorage;
+        private readonly ZipService _zipService;
 
-        public ConsoleInterface(ILocalStorageService localStorage)
+        public ConsoleInterface(ILocalStorageService localStorage, IRemoteStorageService remoteStorage, ZipService zipService)
         {
             _localStorage = localStorage;
+            _remoteStorage = remoteStorage;
+            _zipService = zipService;
         }
 
         public void InitializeInterface()
@@ -86,7 +90,19 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
         private void SaveFile()
         {
+            DrawSection("Save File Section", "Save file is in progress.");
 
+            if (!_localStorage.TryGetConfigurationPath(out var path))
+            {
+                SendNotificationMessage("Save path was not set!", ConsoleColor.Red, 2000);
+
+                DrawUserInterface();
+                PrintMenu();
+                return;
+            }
+
+            var archivePath = _zipService.ZipFile(path);
+            _remoteStorage.UploadFile(archivePath);
         }
 
         private void DrawSection(string sectionName, string instructions)

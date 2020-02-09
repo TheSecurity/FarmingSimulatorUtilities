@@ -1,7 +1,9 @@
-﻿namespace FarmingSimulatorUtilities.ConsoleApp.Storage
+﻿using System.IO;
+
+namespace FarmingSimulatorUtilities.ConsoleApp.Storage
 {
     public interface IRemoteStorageService
     {
-        public void SerializeFile();
+        void UploadFile(string archivePath);
     }
 }
