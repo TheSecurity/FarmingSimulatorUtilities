@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Threading;
 using FarmingSimulatorUtilities.ConsoleApp.Services;
 using FarmingSimulatorUtilities.ConsoleApp.Storage;
@@ -85,7 +86,26 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
         private void LoadFile()
         {
+            DrawSection("Load File Section", "File loading is in progress.");
 
+            if (!_localStorage.TryGetConfigurationPath(out var path))
+            {
+                SendErrorMessage("Save path was not set!", 2000);
+                return;
+            }
+
+            var stream = _remoteStorage.DownloadFile(out var fileName);
+
+            if (fileName is null)
+            {
+                SendErrorMessage("File not found!", 2000);
+            }
+
+            var zipFilePath = $"{path}/{fileName}";
+
+            _localStorage.WriteFile(stream, zipFilePath);
+            _zipService.UnZipFile(zipFilePath, path);
+            _localStorage.DeleteFile(zipFilePath);
         }
 
         private void SaveFile()
@@ -94,15 +114,13 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
             if (!_localStorage.TryGetConfigurationPath(out var path))
             {
-                SendNotificationMessage("Save path was not set!", ConsoleColor.Red, 2000);
-
-                DrawUserInterface();
-                PrintMenu();
+                SendErrorMessage("Save path was not set!", 2000);
                 return;
             }
 
             var archivePath = _zipService.ZipFile(path);
             _remoteStorage.UploadFile(archivePath);
+            File.Delete(archivePath);
         }
 
         private void DrawSection(string sectionName, string instructions)
@@ -145,22 +163,14 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
         private void InsertCredentials()
         {
-            DrawSection("Insert Credentials Section", "Insert your credentials like: email:password. Example: admin@gmail.com:MyVeryStrongPassword. Don't use : in your password");
+            DrawSection("Insert Credentials Section", "Insert your username and press enter.");
 
-            SendSystemMessage("Credentials: ");
+            SendSystemMessage("Username: ");
 
+            var username = Console.ReadLine();
 
-            var path = Console.ReadLine();
-            var content = path.Split(':');
-
-            if (content.Length != 2)
-            {
-                SendNotificationMessage("Error! Wrong credentials inserted. Resetting process of inserting credentials.", ConsoleColor.Red, 3000);
-                InsertCredentials();
-                return;
-            }
-
-            SendSystemMessage($"\nYou entered username: \"{content[0]}\" and password: \"{content[1]}\". Make sure it is valid. Type yes if it is valid. Otherwise type no.\n\nYour choice: ");
+            SendSystemMessage(
+                $"\nYou entered username: \"{username}\". Make sure it is valid. Type yes if it is valid. Otherwise type no.\n\nYour choice: ");
 
             if (GetStandardizedConsoleInput() != "yes")
             {
@@ -169,16 +179,19 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
                 return;
             }
 
-            if (_localStorage.TryInsertCredentials(content[0], content[1], out var errorMessage))
-            {
-                SendNotificationMessage("Success!", ConsoleColor.Green, 1500);
+            _localStorage.InsertCredentials(username);
+            SendNotificationMessage("Success!", ConsoleColor.Green, 1500);
 
-                DrawUserInterface();
-                PrintMenu();
-                return;
-            }
+            DrawUserInterface();
+            PrintMenu();
+        }
 
-            SendNotificationMessage(errorMessage + "\nPath was not saved.", ConsoleColor.Red, 2000);
+        private void SendErrorMessage(string message, int millisecondsTimeout)
+        {
+            SendNotificationMessage(message, ConsoleColor.Red, millisecondsTimeout);
+
+            DrawUserInterface();
+            PrintMenu();
         }
 
         private static void SendNotificationMessage(string message, ConsoleColor color, int millisecondsTimeout)

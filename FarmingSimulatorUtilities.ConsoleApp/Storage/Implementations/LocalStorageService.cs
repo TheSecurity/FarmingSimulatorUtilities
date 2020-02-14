@@ -1,6 +1,5 @@
 ﻿using System.IO;
 using FarmingSimulatorUtilities.ConsoleApp.Entities;
-using FarmingSimulatorUtilities.ConsoleApp.Extensions;
 using Newtonsoft.Json;
 
 namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
@@ -9,9 +8,6 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
     {
         private const string ConfigurationFilePath = @"Resources\config.json";
         private const string CredentialsFilePath = @"Resources\credentials.json";
-
-        public bool ConfigurationFileExists() 
-            => File.Exists(ConfigurationFilePath);
 
         public bool CredentialsFileExists()
             => File.Exists(CredentialsFilePath);
@@ -36,19 +32,10 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
             File.WriteAllText(ConfigurationFilePath, json);
         }
 
-        public bool TryInsertCredentials(string email, string password, out string errorMessage)
+        public void InsertCredentials(string username)
         {
-            if(!email.IsEmail())
-            {
-                errorMessage = "Provided email is not an email address";
-                return false;
-            }
-
-            var json = JsonConvert.SerializeObject(new Credentials(email, password));
+            var json = JsonConvert.SerializeObject(new Credentials(username));
             File.WriteAllText(CredentialsFilePath, json);
-
-            errorMessage = null;
-            return true;
         }
 
         public bool TryGetConfigurationPath(out string path)
@@ -64,5 +51,14 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
             path = configuration.SavePath;
             return true;
         }
+
+        public void WriteFile(MemoryStream stream, string path)
+        {
+            using var file = new FileStream(path, FileMode.Create, FileAccess.Write);
+            stream.WriteTo(file);
+        }
+
+        public void DeleteFile(string path) 
+            => File.Delete(path);
     }
 }
