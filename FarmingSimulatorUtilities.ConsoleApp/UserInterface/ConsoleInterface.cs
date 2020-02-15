@@ -1,23 +1,16 @@
 ﻿using System;
-using System.IO;
-using System.Linq;
 using System.Threading;
 using FarmingSimulatorUtilities.ConsoleApp.Services;
-using FarmingSimulatorUtilities.ConsoleApp.Storage;
 
 namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 {
     public class ConsoleInterface
     {
-        private readonly ILocalStorageService _localStorage;
-        private readonly IRemoteStorageService _remoteStorage;
-        private readonly ZipService _zipService;
+        private readonly ConsoleService _consoleService;
 
-        public ConsoleInterface(ILocalStorageService localStorage, IRemoteStorageService remoteStorage, ZipService zipService)
+        public ConsoleInterface(ConsoleService consoleService)
         {
-            _localStorage = localStorage;
-            _remoteStorage = remoteStorage;
-            _zipService = zipService;
+            _consoleService = consoleService;
         }
 
         public void InitializeInterface()
@@ -64,7 +57,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
             {
                 switch (input)
                 {
-                    case "1": LoadFile();
+                    case "1": DownloadFile();
                         break;
                     case "2": SaveFile();
                         break;
@@ -84,18 +77,21 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
         private static string GetStandardizedConsoleInput()
             => Console.ReadLine().ToLower().Replace(" ", "");
 
-        private void LoadFile()
+        private void DownloadFile()
         {
-            DrawSection("Load File Section", "File loading is in progress.");
+            DrawSection("Download File Section", "File download is in progress.");
 
-            if (!CheckValidConfigurationAndCredentials(out var path, out var username))
+            if (!_consoleService.CheckValidConfigurationAndCredentials(out var path, out var username, out var configError))
+            {
+                SendErrorMessage(configError, 2000);
                 return;
+            }
 
             SendSystemMessage("Looking for lockfile... ");
 
-            if (_remoteStorage.TryGetLockFile(out var lockFileStream, out var fileId))
+            if (_consoleService.TryGetLockFile(out var lockFileStream, out _))
             {
-                var content = _localStorage.GetLockfileContent(ref lockFileStream);
+                var content = _consoleService.GetLockFileContent(ref lockFileStream);
                 SendSystemMessage(content + "\n");
 
                 SendNotificationMessage("Save was not downloaded. Contact user to upload the latest version.\n", ConsoleColor.Red, 10000);
@@ -104,67 +100,34 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
             SendSystemMessage("Nothing found.\n\nDownloading save... ");
 
-            var stream = _remoteStorage.DownloadSave(out var fileName, username);
-
-            if (fileName is null)
+            if (!_consoleService.TryDownloadFile(username, path, out var error))
             {
-                SendErrorMessage("File not found!", 2000);
+                SendErrorMessage(error, 2000);
                 return;
             }
 
-            var zipFilePath = $@"{path}\{fileName}";
-
-            _localStorage.WriteFile(ref stream, zipFilePath);
-            _localStorage.DeletePreviousSave();
-            _zipService.UnZipFile(zipFilePath, path);
-            _localStorage.DeleteFile(zipFilePath);
-
             SendSuccessMessage("Success!", 2000);
-        }
-
-        private bool CheckValidConfigurationAndCredentials(out string configurationPath, out string username)
-        {
-            configurationPath = null;
-            username = null;
-
-            if (!_localStorage.TryGetConfigurationPath(out var path))
-            {
-                SendErrorMessage("Save path was not set!", 2000);
-                return false;
-            }
-
-            if (!_localStorage.TryGetUsername(out var credentialUsername))
-            {
-                SendErrorMessage("Credentials was not found!", 2000);
-                return false;
-            }
-
-            configurationPath = path;
-            username = credentialUsername;
-            return true;
         }
 
         private void SaveFile()
         {
             DrawSection("Save File Section", "Save file is in progress.");
 
-            if(!CheckValidConfigurationAndCredentials(out var path, out var username))
+            if (!_consoleService.CheckValidConfigurationAndCredentials(out var path, out var username, out var configError))
+            {
+                SendErrorMessage(configError, 2000);
                 return;
+            }
 
             SendSystemMessage("Looking for lockfile... ");
 
-            if (_remoteStorage.TryGetLockFile(out var lockFileStream, out var fileId))
+            if (_consoleService.TryGetLockFile(out var lockFileStream, out var fileId))
             {
-                var content = _localStorage.GetLockfileContent(ref lockFileStream);
-                var lockfileUsername = content.Split("user: ")[1].Split("\n").First();
-
-                if (username != lockfileUsername)
+                if (!_consoleService.ValidateLockFile(ref lockFileStream, username, fileId, out var error))
                 {
-                    SendWrongUploadUserNotification(content);
+                    SendWrongUploadUserNotification(error);
                     return;
                 }
-
-                _remoteStorage.DeleteLockFile(fileId);
             }
             else
             { 
@@ -173,9 +136,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
             SendSystemMessage("Uploading save...\n");
 
-            var archivePath = _zipService.ZipFile(path);
-            _remoteStorage.UploadZipFile(archivePath);
-            _localStorage.DeleteFile(archivePath);
+            _consoleService.UploadFile(path);
 
             SendSuccessMessage("Success!", 2000);
         }
@@ -213,7 +174,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
                 return;
             }
 
-            if (_localStorage.TryInsertConfigurationPath(path, out var errorMessage))
+            if (_consoleService.TryInsertConfigurationPath(path, out var errorMessage))
             {
                 SendNotificationMessage("Success!", ConsoleColor.Green, 1500);
 
@@ -243,7 +204,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
                 return;
             }
 
-            _localStorage.InsertCredentials(username);
+            _consoleService.InsertCredentials(username);
             SendSuccessMessage("Success!", 1500);
         }
 
