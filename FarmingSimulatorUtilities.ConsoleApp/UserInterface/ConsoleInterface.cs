@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using FarmingSimulatorUtilities.ConsoleApp.Services;
 using FarmingSimulatorUtilities.ConsoleApp.Storage;
@@ -78,7 +79,6 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
                 input = GetStandardizedConsoleInput();
             }
-
         }
 
         private static string GetStandardizedConsoleInput()
@@ -88,39 +88,103 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
         {
             DrawSection("Load File Section", "File loading is in progress.");
 
-            if (!_localStorage.TryGetConfigurationPath(out var path))
+            if (!CheckValidConfigurationAndCredentials(out var path, out var username))
+                return;
+
+            SendSystemMessage("Looking for lockfile... ");
+
+            if (_remoteStorage.TryGetLockFile(out var lockFileStream, out var fileId))
             {
-                SendErrorMessage("Save path was not set!", 2000);
+                var content = _localStorage.GetLockfileContent(ref lockFileStream);
+                SendSystemMessage(content + "\n");
+
+                SendNotificationMessage("Save was not downloaded. Contact user to upload the latest version.\n", ConsoleColor.Red, 10000);
                 return;
             }
 
-            var stream = _remoteStorage.DownloadFile(out var fileName);
+            SendSystemMessage("Nothing found.\n\nDownloading save... ");
+
+            var stream = _remoteStorage.DownloadSave(out var fileName, username);
 
             if (fileName is null)
             {
                 SendErrorMessage("File not found!", 2000);
+                return;
             }
 
-            var zipFilePath = $"{path}/{fileName}";
+            var zipFilePath = $@"{path}\{fileName}";
 
-            _localStorage.WriteFile(stream, zipFilePath);
+            _localStorage.WriteFile(ref stream, zipFilePath);
+            _localStorage.DeletePreviousSave();
             _zipService.UnZipFile(zipFilePath, path);
             _localStorage.DeleteFile(zipFilePath);
+
+            SendSuccessMessage("Success!", 2000);
+        }
+
+        private bool CheckValidConfigurationAndCredentials(out string configurationPath, out string username)
+        {
+            configurationPath = null;
+            username = null;
+
+            if (!_localStorage.TryGetConfigurationPath(out var path))
+            {
+                SendErrorMessage("Save path was not set!", 2000);
+                return false;
+            }
+
+            if (!_localStorage.TryGetUsername(out var credentialUsername))
+            {
+                SendErrorMessage("Credentials was not found!", 2000);
+                return false;
+            }
+
+            configurationPath = path;
+            username = credentialUsername;
+            return true;
         }
 
         private void SaveFile()
         {
             DrawSection("Save File Section", "Save file is in progress.");
 
-            if (!_localStorage.TryGetConfigurationPath(out var path))
-            {
-                SendErrorMessage("Save path was not set!", 2000);
+            if(!CheckValidConfigurationAndCredentials(out var path, out var username))
                 return;
+
+            SendSystemMessage("Looking for lockfile... ");
+
+            if (_remoteStorage.TryGetLockFile(out var lockFileStream, out var fileId))
+            {
+                var content = _localStorage.GetLockfileContent(ref lockFileStream);
+                var lockfileUsername = content.Split("user: ")[1].Split("\n").First();
+
+                if (username != lockfileUsername)
+                {
+                    SendWrongUploadUserNotification(content);
+                    return;
+                }
+
+                _remoteStorage.DeleteLockFile(fileId);
+            }
+            else
+            { 
+                SendSystemMessage("Nothing found.");
             }
 
+            SendSystemMessage("Uploading save...\n");
+
             var archivePath = _zipService.ZipFile(path);
-            _remoteStorage.UploadFile(archivePath);
-            File.Delete(archivePath);
+            _remoteStorage.UploadZipFile(archivePath);
+            _localStorage.DeleteFile(archivePath);
+
+            SendSuccessMessage("Success!", 2000);
+        }
+
+        private void SendWrongUploadUserNotification(string content)
+        {
+            SendSystemMessage(content + "\n");
+
+            SendErrorMessage("Save was not uploaded. Contact user to upload the latest version.\n", 10000);
         }
 
         private void DrawSection(string sectionName, string instructions)
@@ -158,7 +222,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
                 return;
             }
 
-            SendNotificationMessage(errorMessage + "\nPath was not saved.", ConsoleColor.Red, 2000);
+            SendErrorMessage(errorMessage + "\nPath was not saved.", 2000);
         }
 
         private void InsertCredentials()
@@ -180,7 +244,12 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
             }
 
             _localStorage.InsertCredentials(username);
-            SendNotificationMessage("Success!", ConsoleColor.Green, 1500);
+            SendSuccessMessage("Success!", 1500);
+        }
+
+        private void SendSuccessMessage(string message, int millisecondsTimeout)
+        {
+            SendNotificationMessage(message, ConsoleColor.Green, millisecondsTimeout);
 
             DrawUserInterface();
             PrintMenu();

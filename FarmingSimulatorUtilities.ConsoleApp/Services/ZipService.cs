@@ -12,9 +12,6 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Services
             return archivePath;
         }
 
-        private static string GetId() 
-            => DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
-
         public void UnZipFile(string sourcePath, string destinationPath)
         {
             System.IO.Compression.ZipFile.ExtractToDirectory(sourcePath, destinationPath);

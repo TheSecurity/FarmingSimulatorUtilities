@@ -4,7 +4,9 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage
 {
     public interface IRemoteStorageService
     {
-        void UploadFile(string archivePath);
-        MemoryStream DownloadFile(out string? fileName);
+        void UploadZipFile(string archivePath);
+        MemoryStream DownloadSave(out string fileName, string username);
+        bool TryGetLockFile(out MemoryStream stream, out string fileId);
+        void DeleteLockFile(string fileId);
     }
 }

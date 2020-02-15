@@ -2,6 +2,8 @@
 using FarmingSimulatorUtilities.ConsoleApp.Services;
 using FarmingSimulatorUtilities.ConsoleApp.Storage;
 using FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations;
+using FarmingSimulatorUtilities.ConsoleApp.Storage.Repositories;
+using FarmingSimulatorUtilities.ConsoleApp.Storage.Repositories.Implementations;
 using FarmingSimulatorUtilities.ConsoleApp.UserInterface;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +17,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp
             .AddSingleton<IRemoteStorageService, RemoteStorageService>()
             .AddSingleton<ILocalStorageService, LocalStorageService>()
             .AddSingleton<ZipService>()
+            .AddSingleton<IRemoteStorageRepository, RemoteStorageRepository>()
             .BuildServiceProvider();
     }
 }

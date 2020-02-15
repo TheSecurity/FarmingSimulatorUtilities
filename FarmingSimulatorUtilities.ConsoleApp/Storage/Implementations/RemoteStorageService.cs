@@ -2,92 +2,93 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using FarmingSimulatorUtilities.ConsoleApp.Extensions;
-using Google.Apis.Auth.OAuth2;
-using Google.Apis.Drive.v3;
-using Google.Apis.Services;
-using Google.Apis.Util.Store;
-using File = Google.Apis.Drive.v3.Data.File;
+using FarmingSimulatorUtilities.ConsoleApp.Storage.Repositories;
+using GoogleFile = Google.Apis.Drive.v3.Data.File;
 
 namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
 {
     public class RemoteStorageService : IRemoteStorageService
     {
-        private static DriveService _driveService;
-        private static readonly string[] Scopes = { DriveService.Scope.Drive };
-        private const string ApplicationName = "FarmingSimulatorUtilities";
+        private readonly IRemoteStorageRepository _remoteStorageRepo;
+        private const string LockFileName = "lockfile.txt";
 
-        public RemoteStorageService()
+
+        public RemoteStorageService(IRemoteStorageRepository remoteStorageRepo)
         {
-            UserCredential credential;
-
-            using (var stream = new FileStream("credentials.json", FileMode.Open, FileAccess.Read))
-            {
-                // The file token.json stores the user's access and refresh tokens, and is created
-                // automatically when the authorization flow completes for the first time.
-                const string credentialsPath = "token.json";
-                credential = GoogleWebAuthorizationBroker.AuthorizeAsync(
-                    GoogleClientSecrets.Load(stream).Secrets,
-                    Scopes,
-                    "user",
-                    CancellationToken.None,
-                    new FileDataStore(credentialsPath, true)).Result;
-                Console.WriteLine("Credential file saved to: " + credentialsPath);
-            }
-
-            // Create Drive API service.
-            _driveService = new DriveService(new BaseClientService.Initializer
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = ApplicationName,
-            });
+            _remoteStorageRepo = remoteStorageRepo;
         }
 
-        public void UploadFile(string archivePath)
+        private static bool GetLockFile(ref MemoryStream ms, string username)
         {
-            var fileMetadata = new File {Name = Path.GetFileName(archivePath), MimeType = "application/zip" };
+            var tw = new StreamWriter(ms);
+            tw.Write($"Lock file for user: {username}\n" +
+                     $"Created at: {DateTime.Now.ToDateTimeString()}");
+            tw.Flush();
+            ms.Position = 0;
 
+            return true;
+        }
+
+        public void UploadZipFile(string archivePath)
+        {
             using var stream = new FileStream(archivePath, FileMode.Open);
-
-            var request = _driveService.Files.Create(fileMetadata, stream, "application/zip");
-            request.Fields = "id";
-            request.Upload();
-
-            var file = request.ResponseBody;
+            _remoteStorageRepo.UploadFile(stream, Path.GetFileName(archivePath), "application/zip");
         }
 
-        public MemoryStream DownloadFile(out string? fileName)
+        public MemoryStream DownloadSave(out string fileName, string username)
         {
-            string pageToken = null;
-
-            var latestSave = GetLatestSave(ref pageToken);
+            var latestSave = GetLatestSave();
 
             fileName = latestSave?.Name;
 
-            return latestSave is null 
-                ? null 
-                : DownloadFile(latestSave);
+            if (latestSave is null) return null;
+
+            var str = new MemoryStream();
+
+            if(!GetLockFile(ref str, username)) return null;
+
+            _remoteStorageRepo.UploadFile(str, LockFileName, "text/plain");
+
+            return _remoteStorageRepo.DownloadFile(latestSave);
         }
 
-        private static File GetLatestSave(ref string pageToken)
+        public bool TryGetLockFile(out MemoryStream stream, out string fileId)
         {
-            // Define parameters of request.
-            var listRequest = _driveService.Files.List();
-            listRequest.PageSize = 1;
-            listRequest.Fields = "nextPageToken, files(id, name)";
-            listRequest.PageToken = pageToken;
-            listRequest.Q = "mimeType='application/zip'";
+            var lockfile = _remoteStorageRepo.GetAllFiles().FirstOrDefault(x => x.Name == LockFileName);
 
-            // List files.
-            var request = listRequest.Execute();
-
-            if (request.Files is { } && request.Files.Count > 0)
+            if (lockfile is null)
             {
-                var latestSaveName = GetLatestSaveName(request.Files.Select(x => x.Name).ToList());
-                pageToken = request.NextPageToken;
+                stream = null;
+                fileId = null;
+                return false;
+            }
 
-                return request.Files.FirstOrDefault(x => x.Name.Contains(latestSaveName));
+            stream = _remoteStorageRepo.DownloadFile(lockfile);
+
+            if (stream is { })
+            {
+                fileId = lockfile.Id;
+                return true;
+            }
+
+            stream = null;
+            fileId = null;
+            return false;
+        }
+
+        public void DeleteLockFile(string fileId) 
+            => _remoteStorageRepo.DeleteFile(fileId);
+
+        private GoogleFile GetLatestSave()
+        {
+            var files = _remoteStorageRepo.GetAllFiles();
+
+            if (files is { } && files.Count > 0)
+            {
+                var latestSaveName = GetLatestSaveName(files.Select(x => x.Name).ToList());
+
+                return files.FirstOrDefault(x => x.Name.Contains(latestSaveName));
             }
 
             Console.WriteLine("No files found.");
@@ -109,36 +110,6 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
             var latestDate = dates.OrderByDescending(x => x.Date).FirstOrDefault();
 
             return $"save_{latestDate.ToDateTimeString()}.zip";
-        }
-
-        private static MemoryStream DownloadFile(File file)
-        {
-            var request = _driveService.Files.Get(file.Id);
-            var stream = new MemoryStream();
-
-            request.MediaDownloader.ProgressChanged += progress =>
-            {
-                switch (progress.Status)
-                {
-                    case Google.Apis.Download.DownloadStatus.Downloading:
-                    {
-                        Console.WriteLine(progress.BytesDownloaded);
-                        break;
-                    }
-                    case Google.Apis.Download.DownloadStatus.Completed:
-                    {
-                        Console.WriteLine("Download complete.");
-                        break;
-                    }
-                    case Google.Apis.Download.DownloadStatus.Failed:
-                    {
-                        Console.WriteLine("Download failed.");
-                        break;
-                    }
-                }
-            };
-            request.Download(stream);
-            return stream;
         }
     }
 }
