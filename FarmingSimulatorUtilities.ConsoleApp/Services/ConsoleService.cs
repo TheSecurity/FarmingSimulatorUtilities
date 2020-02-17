@@ -47,7 +47,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Services
                 return false;
             }
 
-            var zipFilePath = $@"{path}\{fileName}";
+            var zipFilePath = $@"{Directory.GetParent(path).FullName}\{fileName}";
 
             _localStorage.WriteFile(ref stream, zipFilePath);
             _localStorage.DeletePreviousSave();

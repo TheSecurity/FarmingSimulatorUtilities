@@ -1,5 +1,5 @@
 ﻿using System.IO;
-using System.Linq;
+using System.Text.RegularExpressions;
 using FarmingSimulatorUtilities.ConsoleApp.Entities;
 using Newtonsoft.Json;
 
@@ -10,12 +10,21 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
         private const string LockFilePath = @"Resources\lockfile.txt";
         private const string ConfigurationFilePath = @"Resources\config.json";
         private const string CredentialsFilePath = @"Resources\credentials.json";
+        private const string ResourcesFolder = @"Resources\";
 
         public bool TryInsertConfigurationPath(string path, out string errorMessage)
         {
             if (!Directory.Exists(path))
             {
                 errorMessage = "Save directory not found.";
+                return false;
+            }
+
+            var regex = new Regex(@"^.*(savegame\d{0,2})");
+
+            if (!regex.Match(path).Success)
+            {
+                errorMessage = "Save directory should be named savegame and number.";
                 return false;
             }
 
@@ -27,18 +36,34 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
 
         private static void InsertConfigurationPath(string path)
         {
+            EnsureResourcesFolderCreation();
+
             var json = JsonConvert.SerializeObject(new Configuration(path));
             File.WriteAllText(ConfigurationFilePath, json);
         }
 
         public void InsertCredentials(string username)
         {
+            EnsureResourcesFolderCreation();
+
             var json = JsonConvert.SerializeObject(new Credentials(username));
             File.WriteAllText(CredentialsFilePath, json);
         }
 
+        private static void EnsureResourcesFolderCreation()
+        {
+            if (!Directory.Exists(ResourcesFolder))
+                Directory.CreateDirectory(ResourcesFolder);
+        }
+
         public bool TryGetConfigurationPath(out string path)
         {
+            if (!File.Exists(ConfigurationFilePath))
+            {
+                path = "";
+                return false;
+            }
+
             var json = File.ReadAllText(ConfigurationFilePath);
             var configuration = JsonConvert.DeserializeObject<Configuration>(json);
             if (string.IsNullOrEmpty(configuration?.SavePath))
@@ -73,10 +98,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
         {
             if (!TryGetConfigurationPath(out var path)) return;
 
-            var contents = Directory.GetDirectories(path);
-
-            foreach (var f in contents) 
-                Directory.Delete(f, true);
+            Directory.Delete(path, true);
         }
 
         public bool TryGetUsername(out string username)

@@ -18,6 +18,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp
             .AddSingleton<ILocalStorageService, LocalStorageService>()
             .AddSingleton<ZipService>()
             .AddSingleton<IRemoteStorageRepository, RemoteStorageRepository>()
+            .AddSingleton<ConsoleService>()
             .BuildServiceProvider();
     }
 }

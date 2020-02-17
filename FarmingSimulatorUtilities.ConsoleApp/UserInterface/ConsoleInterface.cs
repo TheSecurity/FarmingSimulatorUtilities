@@ -40,10 +40,11 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("Type:" +
-                              "\t 1 : Load file\n" +
-                              "\t 2 : Save file\n" +
+                              "\t 1 : Download file\n" +
+                              "\t 2 : Upload file\n" +
                               "\t 3 : Insert save folder path\n" +
-                              "\t 4 : Insert credentials\n\n" +
+                              "\t 4 : Insert credentials\n" +
+                              "\t 5 : Show settings\n\n" +
                               "\t Type exit for leaving the program.\n\n");
             Console.Write("Your choice: ");
             Console.ForegroundColor = ConsoleColor.Magenta;
@@ -59,11 +60,13 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
                 {
                     case "1": DownloadFile();
                         break;
-                    case "2": SaveFile();
+                    case "2": UploadFile();
                         break;
                     case "3": InsertSavePath();
                         break;
                     case "4": InsertCredentials();
+                        break;
+                    case "5": ShowSettings();
                         break;
                 }
 
@@ -72,6 +75,26 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
                 input = GetStandardizedConsoleInput();
             }
+
+            Environment.Exit(0);
+        }
+
+        private void ShowSettings()
+        {
+            DrawSection("Settings Section", "");
+
+            if (!_consoleService.CheckValidConfigurationAndCredentials(out var path, out var username, out var configError))
+            {
+                SendErrorMessage(configError, 3000);
+                return;
+            }
+
+            SendSystemMessage($"Path: {path}\n");
+            SendSystemMessage($"Username: {username}");
+            SendSystemMessage("\n\nPress any key to continue.");
+
+            GetStandardizedConsoleInput();
+            SendSuccessMessage("Success!", 2000);
         }
 
         private static string GetStandardizedConsoleInput()
@@ -83,7 +106,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
             if (!_consoleService.CheckValidConfigurationAndCredentials(out var path, out var username, out var configError))
             {
-                SendErrorMessage(configError, 2000);
+                SendErrorMessage(configError, 3000);
                 return;
             }
 
@@ -102,24 +125,24 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
             if (!_consoleService.TryDownloadFile(username, path, out var error))
             {
-                SendErrorMessage(error, 2000);
+                SendErrorMessage(error, 3000);
                 return;
             }
 
             SendSuccessMessage("Success!", 2000);
         }
 
-        private void SaveFile()
+        private void UploadFile()
         {
             DrawSection("Save File Section", "Save file is in progress.");
 
             if (!_consoleService.CheckValidConfigurationAndCredentials(out var path, out var username, out var configError))
             {
-                SendErrorMessage(configError, 2000);
+                SendErrorMessage(configError, 3000);
                 return;
             }
 
-            SendSystemMessage("Looking for lockfile... ");
+            SendSystemMessage("Looking for lockfile... \n");
 
             if (_consoleService.TryGetLockFile(out var lockFileStream, out var fileId))
             {
@@ -131,7 +154,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
             }
             else
             { 
-                SendSystemMessage("Nothing found.");
+                SendSystemMessage("Nothing found.\n");
             }
 
             SendSystemMessage("Uploading save...\n");
@@ -159,7 +182,7 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
         private void InsertSavePath()
         {
-            DrawSection("Insert Save Path Section", "Insert absolute path to root folder of your save. And press enter");
+            DrawSection("Insert Save Path Section", "Insert absolute path to root folder of your save. And press enter.");
 
             SendSystemMessage("Path: ");
 
@@ -169,21 +192,18 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
             if (GetStandardizedConsoleInput() != "yes")
             {
-                SendNotificationMessage("Resetting process of adding a save path.", ConsoleColor.Red, 2000);
+                SendNotificationMessage("Resetting process of adding a save path.", ConsoleColor.Red, 3000);
                 InsertSavePath();
                 return;
             }
 
             if (_consoleService.TryInsertConfigurationPath(path, out var errorMessage))
             {
-                SendNotificationMessage("Success!", ConsoleColor.Green, 1500);
-
-                DrawUserInterface();
-                PrintMenu();
+                SendSuccessMessage("Success!", 2000);
                 return;
             }
 
-            SendErrorMessage(errorMessage + "\nPath was not saved.", 2000);
+            SendErrorMessage(errorMessage + "\nPath was not saved.", 3000);
         }
 
         private void InsertCredentials()
@@ -199,13 +219,13 @@ namespace FarmingSimulatorUtilities.ConsoleApp.UserInterface
 
             if (GetStandardizedConsoleInput() != "yes")
             {
-                SendNotificationMessage("Resetting process of inserting credentials.", ConsoleColor.Red, 2000);
+                SendNotificationMessage("Resetting process of inserting credentials.", ConsoleColor.Red, 3000);
                 InsertCredentials();
                 return;
             }
 
             _consoleService.InsertCredentials(username);
-            SendSuccessMessage("Success!", 1500);
+            SendSuccessMessage("Success!", 2000);
         }
 
         private void SendSuccessMessage(string message, int millisecondsTimeout)
