@@ -103,6 +103,12 @@ namespace FarmingSimulatorUtilities.ConsoleApp.Storage.Implementations
 
         public bool TryGetUsername(out string username)
         {
+            if (!File.Exists(CredentialsFilePath))
+            {
+                username = "";
+                return false;
+            }
+
             var json = File.ReadAllText(CredentialsFilePath);
             var credentials = JsonConvert.DeserializeObject<Credentials>(json);
             if (string.IsNullOrEmpty(credentials?.Username))
